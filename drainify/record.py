@@ -27,6 +27,7 @@ IMG_PREFIX = "https://d3rt1990lpmkn.cloudfront.net/320/"
 # TODO: make not global
 rec_dir = os.getcwd()
 pa_sink = "combined.monitor"
+advert = False
 
 # running recorders
 running_recs = {}
@@ -116,6 +117,7 @@ class Recorder(object):
 
 # TODO: skipping tracks dont work
 def recording_handler(sender=None, metadata=None, sig=None):
+    global advert
     if "PlaybackStatus" in metadata:
         print(metadata['PlaybackStatus'])
         if metadata['PlaybackStatus'] == 'Paused':
@@ -156,6 +158,11 @@ def recording_handler(sender=None, metadata=None, sig=None):
         # TODO: make configurable
         time.sleep(1.5)
         #secs -= 1.5
+        if (advert):
+            # after an ad, sleep some more
+            time.sleep(1.5) # 0.5 was pretty good
+            
+    advert = artist == ""
 
     # TODO: move into Recorder.start()
     if (secs < 1):
