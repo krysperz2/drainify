@@ -6,7 +6,7 @@ import argparse
 import datetime
 import os
 import time
-import shutil
+import re
 import signal
 import subprocess
 import sys
@@ -24,17 +24,14 @@ import pa
 # url prefix for album covers
 IMG_PREFIX = "https://d3rt1990lpmkn.cloudfront.net/320/"
 
-# TODO: make not global
 rec_dir = os.getcwd()
 pa_sink = "combined.monitor"
-advert = False
 
 # running recorders
-running_recs = {}
-
+running_recs = []
 
 def set_id3_tags(filename, metadata):
-    """Setting the ID3 tags for an audio file.
+    """Set the ID3 tags for an audio file.
 
     :filename: location of the audio file
     :metadata: contains information for the audio file from the dbus event
@@ -45,6 +42,12 @@ def set_id3_tags(filename, metadata):
     except UnicodeEncodeError as uee:
         # I have no idea why this happens
         return
+    except (OSError, IOError) as err:
+        # this can happen when running recording is aborted
+        if (err.errno == 2):
+            print("Unable to tag file \"%s\". Does not exist."%(self.final_path))
+        else:
+            raise
     audiofile.initTag()
 
     audiofile.tag.artist = metadata['xesam:artist'][0]
@@ -66,120 +69,149 @@ def set_id3_tags(filename, metadata):
     try:
         audiofile.tag.save()
     except UnicodeEncodeError as uee:
-        print("writing tags failed due to UnicodeEncodeError")
-        # this happens with Artist Röyskopp
+        print("Writing tags failed due to UnicodeEncodeError.")
+        # this happens with artist alike Röyskopp
         pass
 
 
 class Recorder(object):
-    """Recording the spotify throught pulse audio."""
-    def __init__(self, ffmpeg, metadata, filename, final_path):
-        """Recording the stream.
-
-        :ffmpeg:  ffmpeg recording and encoding subprocess
+    """Record spotify stream via pulse audio."""
+    
+    def __init__(self, metadata, running_recs):
+        """ Prepare recorder.
         :metadata: track information from dbus event
-        :final_path: final file path for the recording
-
+        :running_recs: reference to all running recorders
         """
-        self.ffmpeg = ffmpeg
         self.metadata = metadata
-        self.filename = filename
-        self.final_path = final_path
+        self.running_recs = running_recs
+        self.ffmpeg = None
 
-    def stop_handler(self):
-        """ Killing running recorders immediately """
-        running_recs.pop(self.filename)
-        if (self.ffmpeg.poll() is None):
-            os.killpg(self.ffmpeg.pid, signal.SIGKILL)
-        # TODO: check subprocess status, remove file only if record aborted
-        # remove temporary file
-        print("Would now remove %s"%(self.filename))
-        #try:
-        #    os.remove(self.final_path)
-        #except OSError as ose:
-        #    if (ose.errno == 2):
-        #        print("Unable to remove file %s. Does not exist."%(self.final_path))
-        #    else:
-        #        raise
+        self.name = self.format_name(name_format)
+        self.final_path = os.path.join(rec_dir,"%s.mp3"%(self.name))
+        
+        m = self.metadata['Metadata']
+        length = m["mpris:length"] # is in microseconds
+        secs = length * 1E-6
+        # avoid recording the beginning of the next track
+        secs -= 0.750
+        self.length_seconds = secs
+
+
+    def format_name(self, name_format):
+        """ Prepare file name based on format and metadata. """
+        name = name_format
+        m = self.metadata['Metadata']
+        for arg in re.finditer("@[a-z]+", name_format, re.I):
+            a = arg.group()
+            s = m['xesam:%s'%(a.strip("@"))]
+            s = s[0] if s.__class__ == dbus.Array else s
+            s = str(s)
+            name = name.replace(a,s)
+        return name
+
+    def is_advert(self):
+        """ Whether this is an advertisement is being recorded. """
+        m = self.metadata['Metadata']
+        artist = m['xesam:artist'][0]
+        return artist == ""
+
+
+    def start(self):
+        """ Start recording. """
+        if (self.length_seconds < 1):
+            print("Reported length is too short. Not starting to record.")
+        elif (self.name in [r.name for r in self.running_recs]):
+            # this is neccessary since the "this song is being played now"
+            # message is sometimes received more than once for reasons unknown
+            print("\"%s\" is already being recorded right now. "
+            "Not starting to record again."%(self.name))
+        else:
+            # TODO: make cmd-string configurable
+            cmd = ("ffmpeg -hide_banner -loglevel fatal -f pulse -ac 2 -i %s -c:a libmp3lame -qscale:a 3 -y -t %f"%(pa_sink,self.length_seconds)).split()
+            cmd.append(self.final_path)
+            print("Starting: "+" ".join(cmd))
+            self.ffmpeg = subprocess.Popen(cmd,preexec_fn=os.setsid)
+            self.running_recs.append(self)
+            # wait in background for the recording to finish
+            t = threading.Thread(target=self.wait_recording)
+            t.start()
+
+
+    def stop_handler(self, keep_file = False):
+        """ Request to stop recording. """
+        # I am not sure when exactly this is fired
+        try:
+            self.running_recs.remove(self)
+        except ValueError:
+            # poor thead-safety: might already been removed
+            pass
+        # get record status
+        rc = self.ffmpeg.poll() if self.ffmpeg else None
+        if (rc is None):
+            # recording is still running, ask it to terminate
+            os.kill(self.ffmpeg.pid, signal.SIGTERM)
+            self.ffmpeg.wait() # wait for it
+            keep_file = False
+            print("Aborted recording \"%s\"."%(self.name))
+        if (self.is_advert()):
+            keep_file = False
+            print("%s is an advert."%(self.name))
+        if (not keep_file):
+            print("Removing \"%s\"..."%(self.final_path))
+            try:
+                os.remove(self.final_path)
+            except (OSError, IOError) as err:
+                if (err.errno == 2):
+                    print("Unable to remove file \"%s\". Does not exist."%(self.final_path))
+                else:
+                    raise
+        return keep_file
 
     def wait_recording(self):
-        """ Callback for stopping the recording.
-        Setting ID3 Tags.
-        Moves the temp file to the specific directory.
-        """
+        """ Wait for the recording to end. """
         # waiting for encoder to encode the end of stream
         self.ffmpeg.wait()
-        print("finished recording of %s." % (self.filename))
-        self.stop_handler()
-        
-        set_id3_tags(self.final_path, self.metadata['Metadata'])
+        print("Finished recording \"%s\"." % (self.name))
+        kept_file = self.stop_handler(keep_file=True)
+        if (kept_file):
+            set_id3_tags(self.final_path, self.metadata['Metadata'])
 
 
-# TODO: skipping tracks dont work
 def recording_handler(sender=None, metadata=None, sig=None):
-    global advert
     if "PlaybackStatus" in metadata:
-        print(metadata['PlaybackStatus'])
         if metadata['PlaybackStatus'] == 'Paused':
-            cleanup()
+            stop_all()
             return
         if metadata['PlaybackStatus'] == 'Stopped':
-            cleanup()
+            stop_all()
             return
         if metadata['PlaybackStatus'] == 'Playing':
+            # TODO: skipping tracks does not work cleanly (damaged recording is not removed)
+            # this is fired on queue changes (i.e. adding songs for later), too
             if 'Metadata' not in metadata:
-                print("Metadata")
-                return
-            else:
-                # message contains metadata and PlaybackStatus means track skipping
-                # TODO: call cleanup() ?
-                pass
+                # I never actually observed this case
                 print("No Metadata")
+                return
     else:
+        # I never actually observed this case
         print("No PlaybackStatus")
+        return
 
-    # TODO: move into Recorder.__init__()
-    title = metadata['Metadata']['xesam:title']
-    album = metadata['Metadata']['xesam:album']
-    artist = metadata['Metadata']['xesam:artist'][0]
-    filename = u"%s - %s - %s" % (artist, album, title)
-    print("recording: %s"%(filename))
-
-    final_path = os.path.join(rec_dir,"%s.mp3"%(filename))
-    
-    length = metadata['Metadata']["mpris:length"]
-    # avoid recording the beginning of the next track
-    secs = length * 1E-6
-    secs -= 0.750
-
+    rec = Recorder(metadata, running_recs)
     if (running_recs):
         # this is not the first song being recorded
+        sleeptime = 1.5 # TODO: make configurable
+        try:
+            if (running_recs[-1].is_advert()):
+                # after an ad, sleep some more
+                sleeptime += 0.5 # sometimes 0.5 is not enough
+        except IndexError:
+            # poor thread-safety: this happens if a recording finished between if (running_recs) and access to running_recs[-1]
+            pass
         # do not record the end of the last song, so sleep
-        # TODO: make configurable
-        time.sleep(1.5)
-        #secs -= 1.5
-        if (advert):
-            # after an ad, sleep some more
-            time.sleep(1.5) # 0.5 was pretty good
-            
-    advert = artist == ""
+        time.sleep(sleeptime)
+    rec.start()
 
-    # TODO: move into Recorder.start()
-    if (secs < 1):
-        print("Reported length is too short. Not starting to record.")
-    elif (filename in running_recs):
-        print("No, wait - this is already being recorded right now. "
-        "Not starting to record again.")
-    else:
-        cmd = ("ffmpeg -hide_banner -loglevel fatal -f pulse -ac 2 -i %s -c:a libmp3lame -qscale:a 3 -y -t %f"%(pa_sink,secs)).split()
-        cmd.append(final_path)
-        print(" ".join(cmd))
-        ffmpeg = subprocess.Popen(cmd,preexec_fn=os.setsid)
-
-        r = Recorder(ffmpeg, metadata, filename, final_path)
-        running_recs[filename] = r
-        t = threading.Thread(target=r.wait_recording)
-        t.start()
 
 def debug_handler(sender=None, metadata=None, k2=None):
     print(datetime.datetime.now(), "got signal from ", sender)
@@ -188,10 +220,10 @@ def debug_handler(sender=None, metadata=None, k2=None):
     print("")
 
 
-def cleanup():
-    """Kill all running recordings."""
-    for rec in running_recs.values():
-        rec.stop_handler()
+def stop_all():
+    """Terminate all running recordings."""
+    while running_recs:
+        running_recs.pop().stop_handler()
     print("Stopped all recordings.")
 
 
@@ -204,6 +236,13 @@ def main():
                         "(Default: current directory)",
                         type=str)
 
+    parser.add_argument('--name',
+                        '-n',
+                        help="File name pattern for recordings. "
+                        "(Default: @artist - @album - @trackNumber - @title",
+                        default="@artist - @album - @trackNumber - @title",
+                        type=str)
+
     parser.add_argument('--sink',
                         '-s',
                         help="Pulseaudio sink to record from. "
@@ -213,14 +252,17 @@ def main():
     args = parser.parse_args()
     if args.dir:
         if not os.path.exists(args.dir):
-            create_dir = raw_input("Directory doesn't exists. Create? [y/n] ")
+            create_dir = raw_input("Directory doesn't exist. Create? [y/n] ")
             if create_dir == 'y':
                 os.mkdir(args.dir)
             else:
                 sys.exit()
-
         global rec_dir
         rec_dir = os.path.abspath(args.dir)
+        
+    if args.name:
+        global name_format
+        name_format = args.name
     
     if args.sink:
         global pa_sink
@@ -246,12 +288,18 @@ def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SessionBus()
     try:
-        remote_object = bus.get_object("org.mpris.MediaPlayer2.spotify",
-                                       "/org/mpris/MediaPlayer2")
-        change_manager = dbus.Interface(remote_object,
-                                        'org.freedesktop.DBus.Properties')
-        change_manager.connect_to_signal("PropertiesChanged",
-                                         recording_handler)
+        remote_object = bus.get_object(
+            "org.mpris.MediaPlayer2.spotify",
+            "/org/mpris/MediaPlayer2"
+        )
+        change_manager = dbus.Interface(
+            remote_object,
+            'org.freedesktop.DBus.Properties'
+        )
+        change_manager.connect_to_signal(
+            "PropertiesChanged",
+            recording_handler
+        )
     except dbus.exceptions.DBusException as dbe:
         if (dbe.get_dbus_name() == "org.freedesktop.DBus.Error.ServiceUnknown"):
             print("Please start Spotify first. (%s)"%(dbe.get_dbus_message()))
@@ -265,7 +313,7 @@ def main():
         print("Received KeyboardInterrupt. Quiting.")
         if not args.sink:
             pa.unload_combined_sink(combined_sink)
-        cleanup()
+        stop_all()
 
 if __name__ == '__main__':
     main()
