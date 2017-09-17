@@ -65,12 +65,15 @@ def set_id3_tags(filename, metadata):
     except ValueError as ve:
         # this can happen upon _, cover_id = cover_art_url.rsplit('/', 1)
         pass
+    except URLError as ue:
+        # this can happen upon image_data = urllib2.urlopen(art_url).read()
+        pass
 
     try:
         audiofile.tag.save()
     except UnicodeEncodeError as uee:
         print("Writing tags failed due to UnicodeEncodeError.")
-        # this happens with artist alike Röyskopp
+        # this happens with non-ascii artist names like "Röyskopp"
         pass
 
 
