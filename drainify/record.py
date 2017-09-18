@@ -108,7 +108,7 @@ class Recorder(object):
             a = arg.group()
             s = m['xesam:%s'%(a.strip("@"))]
             s = s[0] if s.__class__ == dbus.Array else s
-            s = str(s)
+            s = unicode(s)
             name = name.replace(a,s)
         return name
 
@@ -265,7 +265,7 @@ def main():
         
     if args.name:
         global name_format
-        name_format = args.name
+        name_format = args.name.decode("utf-8")
     
     if args.sink:
         global pa_sink
