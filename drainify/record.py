@@ -38,16 +38,18 @@ def set_id3_tags(filename, metadata):
 
     """
     try:
-        audiofile = eyed3.load(filename)
-    except UnicodeEncodeError as uee:
-        # I have no idea why this happens
-        return
-    except (OSError, IOError) as err:
+        audiofile = eyed3.load(filename.encode("utf-8"))
+    except OSError as ose:
         # this can happen when running recording is aborted
-        if (err.errno == 2):
-            print("Unable to tag file \"%s\". Does not exist."%(self.final_path))
+        if (ose.errno == 2):
+            print("Unable to tag file \"%s\". Does not exist."%(filename))
+            return
         else:
             raise
+    except IOError as ioe:
+        # this can happen when running recording is aborted
+        print("Unable to tag file \"%s\" due to IOError."%(filename))
+        return
     audiofile.initTag()
 
     audiofile.tag.artist = metadata['xesam:artist'][0]
@@ -163,8 +165,8 @@ class Recorder(object):
             print("Removing \"%s\"..."%(self.final_path))
             try:
                 os.remove(self.final_path)
-            except (OSError, IOError) as err:
-                if (err.errno == 2):
+            except OSError as ose:
+                if (ose.errno == 2):
                     print("Unable to remove file \"%s\". Does not exist."%(self.final_path))
                 else:
                     raise
