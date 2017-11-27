@@ -24,8 +24,10 @@ import pa
 # url prefix for album covers
 IMG_PREFIX = "https://d3rt1990lpmkn.cloudfront.net/320/"
 
-rec_dir = os.getcwd()
-pa_sink = "combined.monitor"
+config = type('Config', (object,), {
+'rec_dir': os.getcwd(), 
+'pa_sink': "combined.monitor"
+})()
 
 # running recorders
 running_recs = []
@@ -91,8 +93,8 @@ class Recorder(object):
         self.running_recs = running_recs
         self.ffmpeg = None
 
-        self.name = self.format_name(name_format)
-        self.final_path = os.path.join(rec_dir,"%s.mp3"%(self.name))
+        self.name = self.format_name(config.name_format)
+        self.final_path = os.path.join(config.rec_dir,"%s.mp3"%(self.name))
         
         m = self.metadata['Metadata']
         length = m["mpris:length"] # is in microseconds
@@ -132,8 +134,8 @@ class Recorder(object):
             "Not starting to record again."%(self.name))
         else:
             # TODO: make cmd-string configurable
-            cmd = ("ffmpeg -hide_banner -loglevel fatal -f pulse -ac 2 -i %s -c:a libmp3lame -qscale:a 3 -y -t %f"%(pa_sink,self.length_seconds)).split()
-            cmd.append(self.final_path)
+            cmd = config.command.split()
+            cmd = [c.replace('@length',str(self.length_seconds)).replace('@sink',config.pa_sink).replace('@file',self.final_path) for c in cmd]
             print("Starting: "+" ".join(cmd))
             self.ffmpeg = subprocess.Popen(cmd,preexec_fn=os.setsid)
             self.running_recs.append(self)
@@ -253,6 +255,16 @@ def main():
                         help="Pulseaudio sink to record from. "
                         "(Default: search for spotify in particular)",
                         type=str)
+                        
+    parser.add_argument('--command',
+                        '-c',
+                        help="Command to start for recording. "
+                        "@sink specifies Pulseaudio source sink. "
+                        "@length specifies the recording length in seconds. "
+                        "@file specifies the output file. "
+                        "(Default: \"ffmpeg -hide_banner -loglevel fatal -f pulse -ac 2 -ar 44100 -i @sink -c:a libmp3lame -qscale:a 3 -y -t @length @file\")",
+                        default="ffmpeg -hide_banner -loglevel fatal -f pulse -ac 2 -ar 44100 -i @sink -c:a libmp3lame -qscale:a 3 -y -t @length @file",
+                        type=str)
 
     args = parser.parse_args()
     if args.dir:
@@ -262,17 +274,14 @@ def main():
                 os.mkdir(args.dir)
             else:
                 sys.exit()
-        global rec_dir
-        rec_dir = os.path.abspath(args.dir)
+        config.rec_dir = os.path.abspath(args.dir)
         
-    if args.name:
-        global name_format
-        name_format = args.name.decode("utf-8")
+    config.name_format = args.name.decode("utf-8")
+    config.command = args.command.decode("utf-8")
     
     if args.sink:
-        global pa_sink
-        pa_sink = args.sink
-        print("Recording from explicitly set sink %s."%(pa_sink))
+        config.pa_sink = args.sink
+        print("Recording from explicitly set sink %s."%(config.pa_sink))
     else:
         print("Looking for direct connection to spotify audio stream...")
         # init combined sink
