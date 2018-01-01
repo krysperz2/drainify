@@ -94,7 +94,10 @@ class Recorder(object):
         self.ffmpeg = None
 
         self.name = self.format_name(config.name_format)
-        self.final_path = os.path.join(config.rec_dir,"%s.mp3"%(self.name))
+        name = self.name
+        # replace reserved characters
+        name = name.replace(u"/",u"／") # slash is directory separator on unixoid systems
+        self.final_path = os.path.join(config.rec_dir,"%s.mp3"%(name))
         
         m = self.metadata['Metadata']
         length = m["mpris:length"] # is in microseconds
