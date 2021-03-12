@@ -69,7 +69,7 @@ def set_id3_tags(filename, metadata):
     except ValueError as ve:
         # this can happen upon _, cover_id = cover_art_url.rsplit('/', 1)
         pass
-    except URLError as ue:
+    except URLError as ue: # TODO: fix import
         # this can happen upon image_data = urllib2.urlopen(art_url).read()
         pass
 
@@ -135,6 +135,8 @@ class Recorder(object):
             # message is sometimes received more than once for reasons unknown
             print("\"%s\" is already being recorded right now. "
             "Not starting to record again."%(self.name))
+        elif (os.path.isfile(self.final_path)):
+            print("\"%s\" already exists. Not overwriting."%(self.final_path))
         else:
             # TODO: make cmd-string configurable
             cmd = config.command.split()
