@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # encoding: utf-8
 from __future__ import print_function
 
@@ -11,13 +11,13 @@ import signal
 import subprocess
 import sys
 import tempfile as tmp
-import urllib2
+from urllib.request import urlopen
 
 import dbus
 import dbus.mainloop.glib
 import eyed3
-import gobject
 import threading
+from gi.repository import GLib
 
 import pa
 
@@ -40,7 +40,7 @@ def set_id3_tags(filename, metadata):
 
     """
     try:
-        audiofile = eyed3.load(filename.encode("utf-8"))
+        audiofile = eyed3.load(filename)
     except OSError as ose:
         # this can happen when running recording is aborted
         if (ose.errno == 2):
@@ -64,14 +64,14 @@ def set_id3_tags(filename, metadata):
         cover_art_url = metadata['mpris:artUrl']
         _, cover_id = cover_art_url.rsplit('/', 1)
         art_url = IMG_PREFIX + cover_id
-        image_data = urllib2.urlopen(art_url).read()
+        image_data = urlopen(art_url).read()
         audiofile.tag.images.set(3, image_data, "image/jpeg", u"")
     except ValueError as ve:
         # this can happen upon _, cover_id = cover_art_url.rsplit('/', 1)
         pass
-    except URLError as ue: # TODO: fix import
-        # this can happen upon image_data = urllib2.urlopen(art_url).read()
-        pass
+    #except URLError as ue: # TODO: fix import
+    #    # this can happen upon image_data = urlopen(art_url).read()
+    #    pass
 
     try:
         audiofile.tag.save()
@@ -115,8 +115,7 @@ class Recorder(object):
             a = arg.group()
             s = m['xesam:%s'%(a.strip("@"))]
             s = s[0] if s.__class__ == dbus.Array else s
-            s = unicode(s)
-            name = name.replace(a,s)
+            name = name.replace(a, str(s))
         return name
 
     def is_advert(self):
@@ -274,15 +273,15 @@ def main():
     args = parser.parse_args()
     if args.dir:
         if not os.path.exists(args.dir):
-            create_dir = raw_input("Directory doesn't exist. Create? [y/n] ")
+            create_dir = input("Directory doesn't exist. Create? [y/n] ")
             if create_dir == 'y':
                 os.mkdir(args.dir)
             else:
                 sys.exit()
         config.rec_dir = os.path.abspath(args.dir)
         
-    config.name_format = args.name.decode("utf-8")
-    config.command = args.command.decode("utf-8")
+    config.name_format = args.name
+    config.command = args.command
     
     if args.sink:
         config.pa_sink = args.sink
@@ -295,7 +294,7 @@ def main():
         if len(sinks) > 1:
             for i, s in enumerate(sinks):
                 print("%i: %s" % (i, s))
-            sink_choose = raw_input("Choose your audio device (Default [0]): ")
+            sink_choose = input("Choose your audio device (Default [0]): ")
         # default sink
         if not sink_choose:
             sink_choose = 0
@@ -323,7 +322,7 @@ def main():
         if (dbe.get_dbus_name() == "org.freedesktop.DBus.Error.ServiceUnknown"):
             print("Please start Spotify first. (%s)"%(dbe.get_dbus_message()))
             sys.exit()
-    loop = gobject.MainLoop()
+    loop = GLib.MainLoop()
 
     try:
         print("Start recording on next track.")

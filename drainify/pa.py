@@ -104,7 +104,7 @@ def main():
     for i, s in enumerate(sinks):
         print("%i: %s" % (i, s))
 
-    sink_choose = raw_input("Choose your audio device (Default [0]): ")
+    sink_choose = input("Choose your audio device (Default [0]): ")
 
     # default sink
     if not sink_choose:
@@ -116,7 +116,7 @@ def main():
     combined_sink = create_combined_sink(rec_sink)
     print("create combined sink", combined_sink)
     move_sink_input(spot_id)
-    raw_input("Press key.")
+    input("Press key.")
     unload_combined_sink(combined_sink)
     print("unload combined sink.")
 
