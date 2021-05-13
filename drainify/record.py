@@ -96,7 +96,14 @@ class Recorder(object):
         self.name = self.format_name(config.name_format)
         name = self.name
         # replace reserved characters
-        name = name.replace(u"/",u"／") # slash is directory separator on unixoid systems
+        for o,r in {
+            u"/":u"／", # slash is directory separator on unixoid systems
+            u"?":u"﹖", # FAT32 does not like ?
+            u"<":u"‹", # FAT32 does not like >
+            u">":u"›", # FAT32 does not like <
+            u":":u"：" # FAT32 does not like :
+        }.items():
+            name = name.replace(o, r)
         self.final_path = os.path.join(config.rec_dir,"%s.mp3"%(name))
         
         m = self.metadata['Metadata']
