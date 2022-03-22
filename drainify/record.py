@@ -98,6 +98,8 @@ class Recorder(object):
         # replace reserved characters
         for o,r in {
             u"/":u"／", # slash is directory separator on unixoid systems
+            u"\\":u"＼", # backslash is directory separator on Windows systems. exFAT does not like \
+            u"*":u"＊", # exFAT does not like *
             u"?":u"﹖", # FAT32 does not like ?
             u"<":u"‹", # FAT32 does not like >
             u">":u"›", # FAT32 does not like <
