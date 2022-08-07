@@ -202,19 +202,17 @@ def recording_handler(sender=None, metadata=None, sig=None):
         if metadata['PlaybackStatus'] == 'Paused':
             stop_all()
             return
-        if metadata['PlaybackStatus'] == 'Stopped':
+        elif metadata['PlaybackStatus'] == 'Stopped':
             stop_all()
             return
-        if metadata['PlaybackStatus'] == 'Playing':
-            # TODO: skipping tracks does not work cleanly (damaged recording is not removed)
-            # this is fired on queue changes (i.e. adding songs for later), too
-            if 'Metadata' not in metadata:
-                # I never actually observed this case
-                print("No Metadata")
-                return
-    else:
-        # I never actually observed this case
-        print("No PlaybackStatus")
+        else:
+            # assume metadata['PlaybackStatus'] == 'Playing'
+            # this may try to start to record multiple times in parallel,
+            # but Recorder.start() will check for that
+            pass
+    
+    if 'Metadata' not in metadata:
+        print("No Metadata. Restart Spotify, drainify, dbus and/or your user session.")
         return
 
     rec = Recorder(metadata, running_recs)
@@ -224,11 +222,11 @@ def recording_handler(sender=None, metadata=None, sig=None):
         try:
             if (running_recs[-1].is_advert()):
                 # after an ad, sleep some more
-                sleeptime += 0.5 # sometimes 0.5 is not enough
+                sleeptime += 0.5 # sometimes 0.5 is not enough; 1.0 would be better 2022
         except IndexError:
             # poor thread-safety: this happens if a recording finished between if (running_recs) and access to running_recs[-1]
             pass
-        # do not record the end of the last song, so sleep
+        # do not record the end of the previous song, so sleep
         time.sleep(sleeptime)
     rec.start()
 
