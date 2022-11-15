@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile as tmp
 from urllib.request import urlopen
+from urllib.error import HTTPError
 
 import dbus
 import dbus.mainloop.glib
@@ -66,6 +67,8 @@ def set_id3_tags(filename, metadata):
         art_url = IMG_PREFIX + cover_id
         image_data = urlopen(art_url).read()
         audiofile.tag.images.set(3, image_data, "image/jpeg", u"")
+    except HTTPError as httperr:
+        print("Unable to download cover art due to %s."%(str(httperr)))
     except ValueError as ve:
         # this can happen upon _, cover_id = cover_art_url.rsplit('/', 1)
         pass
@@ -77,7 +80,7 @@ def set_id3_tags(filename, metadata):
         audiofile.tag.save()
     except UnicodeEncodeError as uee:
         print("Writing tags failed due to UnicodeEncodeError.")
-        # this happens with non-ascii artist names like "Röyskopp"
+        # this happens in Python 2 with non-ascii artist names like "Röyskopp"
         pass
 
 
@@ -219,13 +222,6 @@ def recording_handler(sender=None, metadata=None, sig=None):
     if (running_recs):
         # this is not the first song being recorded
         sleeptime = 1.5 # TODO: make configurable
-        try:
-            if (running_recs[-1].is_advert()):
-                # after an ad, sleep some more
-                sleeptime += 0.5 # sometimes 0.5 is not enough; 1.0 would be better 2022
-        except IndexError:
-            # poor thread-safety: this happens if a recording finished between if (running_recs) and access to running_recs[-1]
-            pass
         # do not record the end of the previous song, so sleep
         time.sleep(sleeptime)
     rec.start()
@@ -273,8 +269,8 @@ def main():
                         "@sink specifies Pulseaudio source sink. "
                         "@length specifies the recording length in seconds. "
                         "@file specifies the output file. "
-                        "(Default: \"ffmpeg -hide_banner -loglevel fatal -f pulse -ac 2 -ar 44100 -i @sink -c:a libmp3lame -qscale:a 3 -y -t @length @file\")",
-                        default="ffmpeg -hide_banner -loglevel fatal -f pulse -ac 2 -ar 44100 -i @sink -c:a libmp3lame -qscale:a 3 -y -t @length @file",
+                        "(Default: \"ffmpeg -hide_banner -loglevel error -f pulse -ac 2 -ar 44100 -i @sink -c:a libmp3lame -qscale:a 3 -y -t @length @file\")",
+                        default="ffmpeg -hide_banner -loglevel error -f pulse -ac 2 -ar 44100 -i @sink -c:a libmp3lame -qscale:a 3 -y -t @length @file",
                         type=str)
 
     args = parser.parse_args()
