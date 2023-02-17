@@ -221,7 +221,15 @@ def recording_handler(sender=None, metadata=None, sig=None):
     rec = Recorder(metadata, running_recs)
     if (running_recs):
         # this is not the first song being recorded
-        sleeptime = 1.5 # TODO: make configurable
+        # TODO: this does not work if recording finishes early
+        sleeptime = config.delay # good in 2023 for "crossfade" and "automix" disabled TODO: make configurable
+        try:
+            if (running_recs[-1].is_advert()):
+                # after an ad, sleep some more
+                sleeptime += 1.0 # 2022
+        except IndexError:
+            # poor thread-safety: this happens if a recording finished between if (running_recs) and access to running_recs[-1]
+            pass
         # do not record the end of the previous song, so sleep
         time.sleep(sleeptime)
     rec.start()
@@ -242,7 +250,7 @@ def stop_all():
 
 
 def main():
-    parser = argparse.ArgumentParser("Record you tracks playing with spotify on pulseaudio.")
+    parser = argparse.ArgumentParser("Record tracks played by spotify via pulseaudio.")
 
     parser.add_argument('--dir',
                         '-d',
@@ -262,6 +270,13 @@ def main():
                         help="Pulseaudio sink to record from. "
                         "(Default: search for spotify in particular)",
                         type=str)
+
+    parser.add_argument('--delay',
+                        '-r',
+                        help="Seconds to wait after switching tracs before starting to record. "
+                        "(Default: 2.5 seconds)",
+                        default=2.5,
+                        type=float)
                         
     parser.add_argument('--command',
                         '-c',
