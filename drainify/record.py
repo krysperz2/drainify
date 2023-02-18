@@ -115,7 +115,7 @@ class Recorder(object):
         length = m["mpris:length"] # is in microseconds
         secs = length * 1E-6
         # avoid recording the beginning of the next track
-        secs -= 0.750
+        #secs -= 0.750
         self.length_seconds = secs
 
 
@@ -219,21 +219,9 @@ def recording_handler(sender=None, metadata=None, sig=None):
         return
 
     rec = Recorder(metadata, running_recs)
-    if (running_recs):
-        # this is not the first song being recorded
-        # TODO: this does not work if recording finishes early
-        sleeptime = config.delay # good in 2023 for "crossfade" and "automix" disabled TODO: make configurable
-        try:
-            if (running_recs[-1].is_advert()):
-                # after an ad, sleep some more
-                sleeptime += 1.0 # 2022
-        except IndexError:
-            # poor thread-safety: this happens if a recording finished between if (running_recs) and access to running_recs[-1]
-            pass
-        # do not record the end of the previous song, so sleep
-        time.sleep(sleeptime)
+    sleeptime = config.delay
+    time.sleep(sleeptime)
     rec.start()
-
 
 def debug_handler(sender=None, metadata=None, k2=None):
     print(datetime.datetime.now(), "got signal from ", sender)
@@ -274,8 +262,8 @@ def main():
     parser.add_argument('--delay',
                         '-r',
                         help="Seconds to wait after switching tracs before starting to record. "
-                        "(Default: 2.5 seconds)",
-                        default=2.5,
+                        "(Default: 2.0 seconds)",
+                        default=2.0,
                         type=float)
                         
     parser.add_argument('--command',
@@ -300,6 +288,7 @@ def main():
         
     config.name_format = args.name
     config.command = args.command
+    config.delay = args.delay
     
     if args.sink:
         config.pa_sink = args.sink
