@@ -6,22 +6,24 @@ import dbus
 import os
 import subprocess
 import threading
-import time
+import datetime
 
 import requests
 import mutagen.id3
 
 class Recording:
     """Record spotify stream via pulse audio."""
-    def __init__(self, tonmeister, metadata):
+    def __init__(self, tonmeister, metadata, delay_seconds):
         self.tonmeister = tonmeister
         self.metadata = metadata
         self.ffmpeg = None
+        self.reaper = None
         self.filename = self.format_filename(metadata, tonmeister.name_format)
         self.output_path = os.path.join(tonmeister.output_directory, f"{self.sanitize_filename(self.filename)}.mp3")
+        self.delay_seconds = delay_seconds
         length_microseconds = self.metadata["mpris:length"]
         self.length_seconds = length_microseconds * 1E-6
-        self.reaper = None
+        self.end_time = datetime.datetime.now() + datetime.timedelta(seconds=self.length_seconds+self.delay_seconds)
 
     @staticmethod
     def format_filename(metadata, filename_format):
@@ -66,16 +68,15 @@ class Recording:
         elif (os.path.isfile(self.output_path)):
             print(f'"{self.filename}" already exists. Not overwriting.')
         else:
-            time.sleep(self.tonmeister.record_delay_seconds)
             cmd = self.tonmeister.ffmpeg_command.split()
             cmd = [c
                 .replace('@length',f"{self.length_seconds:.2f}")
                 .replace('@sink',self.tonmeister.pulseaudio_sink)
                 .replace('@file',self.output_path) 
+                .replace('@delay',f"{self.delay_seconds:.2f}")
                 for c in cmd]
             print("Starting: "+" ".join(cmd))
             self.ffmpeg = subprocess.Popen(cmd, stdin=subprocess.PIPE, encoding='utf-8') # TODO: get system encoding
-            self.tonmeister.recordings.append(self)
             # wait in background for the recording to finish
             self.reaper = threading.Thread(target=self.wait)
             self.reaper.start()
@@ -96,11 +97,14 @@ class Recording:
         else:
             returncode = self.ffmpeg.poll() # poll() returns None while subprocess is still running
             return returncode is None
+            
+    def is_complete(self):
+        return datetime.datetime.now() + datetime.timedelta(seconds=5) > self.end_time
 
     def abort(self):
         """ Request to abort recording. """
-        if (self.is_active()):
-            print(f'Aborting to record "{self.filename}"...')
+        if (self.is_active() and not self.is_complete()):
+            print(f'Abort recording "{self.filename}"...')
             # recording is still running, ask it to terminate
             #print(f'Sending q...')
             #self.ffmpeg.communicate('q\n', timeout=1) # does not suffice

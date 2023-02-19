@@ -21,8 +21,16 @@ class Tonmeister:
         if 'Metadata' not in changed_properties:
             print("No information about the current song. Skip to next song. Add current song to queue to try again.")
             return
-        recording = Recording(self, changed_properties['Metadata'])
+        delay_seconds = self.record_delay_seconds
+        if (not self.recordings):
+            print("This is the first recording, starting without delay.")
+            delay_seconds = 0
+        elif (not self.recordings[-1].is_complete()):
+            print("Current recording is incomplete, song was probably skipped, recording next one without delay.")
+            delay_seconds = 0
+        recording = Recording(self, changed_properties['Metadata'], delay_seconds)
         recording.start()
+        self.recordings.append(recording)
     
     def stop_all(self):
         aborters = []

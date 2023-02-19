@@ -36,7 +36,7 @@ def main():
                         "@length specifies the recording length in seconds. "
                         "@file specifies the output file. "
                         "(Default: \"ffmpeg -hide_banner -loglevel error -f pulse -ac 2 -ar 44100 -i @sink -c:a libmp3lame -qscale:a 3 -y -t @length @file\")",
-                        default="ffmpeg -hide_banner -loglevel error -f pulse -ac 2 -ar 44100 -i @sink -c:a libmp3lame -qscale:a 3 -y -t @length @file",
+                        default="ffmpeg -hide_banner -loglevel error -f pulse -ac 2 -ar 44100 -i @sink -ss @delay -c:a libmp3lame -qscale:a 3 -y -t @length @file",
                         type=str)
     parser.add_argument('--useragent',
                         help="User-Agent for HTTP Requests downloading cover artwork. "
