@@ -57,29 +57,18 @@ class Recording:
 
     def start(self):
         """ Start recording. """
-        if (self.is_advert()):
-            print("This is an advertisement. Will not record.")
-        elif (self.length_seconds < 1):
-            print("Reported length is too short. Not starting to record.")
-        elif (self.filename in [r.filename for r in self.tonmeister.recordings]):
-            # this is neccessary since the "this song is being played now"
-            # message is sometimes received more than once for reasons unknown
-            print(f'"{self.filename}" is already being recorded right now. Not starting to record again.')
-        elif (os.path.isfile(self.output_path)):
-            print(f'"{self.filename}" already exists. Not overwriting.')
-        else:
-            cmd = self.tonmeister.ffmpeg_command.split()
-            cmd = [c
-                .replace('@length',f"{self.length_seconds:.2f}")
-                .replace('@sink',self.tonmeister.pulseaudio_sink)
-                .replace('@file',self.output_path) 
-                .replace('@delay',f"{self.delay_seconds:.2f}")
-                for c in cmd]
-            print("Starting: "+" ".join(cmd))
-            self.ffmpeg = subprocess.Popen(cmd, stdin=subprocess.PIPE, encoding='utf-8') # TODO: get system encoding
-            # wait in background for the recording to finish
-            self.reaper = threading.Thread(target=self.wait)
-            self.reaper.start()
+        cmd = self.tonmeister.ffmpeg_command.split()
+        cmd = [c
+            .replace('@length',f"{self.length_seconds:.2f}")
+            .replace('@sink',self.tonmeister.pulseaudio_sink)
+            .replace('@file',self.output_path) 
+            .replace('@delay',f"{self.delay_seconds:.2f}")
+            for c in cmd]
+        print("Starting: "+" ".join(cmd))
+        self.ffmpeg = subprocess.Popen(cmd, stdin=subprocess.PIPE, encoding='utf-8') # TODO: get system encoding
+        # wait in background for the recording to finish
+        self.reaper = threading.Thread(target=self.wait)
+        self.reaper.start()
             
     def wait(self):
         """ Wait for the recording to end. """

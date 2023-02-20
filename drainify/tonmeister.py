@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # encoding: utf-8
 
+import os
 import threading
 from .recording import Recording
 
@@ -21,6 +22,7 @@ class Tonmeister:
         if 'Metadata' not in changed_properties:
             print("No information about the current song. Skip to next song. Add current song to queue to try again.")
             return
+        metadata = changed_properties['Metadata']
         delay_seconds = self.record_delay_seconds
         if (not self.recordings):
             print("This is the first recording, starting without delay.")
@@ -28,8 +30,21 @@ class Tonmeister:
         elif (not self.recordings[-1].is_complete()):
             print("Current recording is incomplete, song was probably skipped, recording next one without delay.")
             delay_seconds = 0
-        recording = Recording(self, changed_properties['Metadata'], delay_seconds)
+        recording = Recording(self, metadata, delay_seconds)
+        if (recording.is_advert()):
+            print("This is an advertisement. Will not record.")
+            return
+        if (recording.length_seconds < 1):
+            print("Reported length is too short. Not starting to record.")
+            return
+        if (recording.filename in [r.filename for r in self.recordings]):
+            # this is neccessary since the "this song is being played now"
+            # message is sometimes received more than once for reasons unknown
+            print(f'"{recording.filename}" is already being recorded right now. Not starting to record again.')
+        elif (os.path.isfile(recording.output_path)):
+            print(f'"{recording.filename}" already exists. Not overwriting.')
         recording.start()
+        self.stop_all()
         self.recordings.append(recording)
     
     def stop_all(self):
