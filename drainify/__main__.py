@@ -49,7 +49,7 @@ def main():
         if not os.path.exists(args.dir):
             create_dir = input("Directory doesn't exist. Create? [y/n] ")
             if create_dir == 'y':
-                os.mkdir(args.dir)
+                os.makedirs(args.dir, exist_ok=True)
             else:
                 sys.exit(1)
         tonmeister.rec_dir = os.path.abspath(args.dir)
