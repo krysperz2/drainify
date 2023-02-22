@@ -18,7 +18,7 @@ def main():
                         type=str)
     parser.add_argument('--name',
                         help="File name pattern for recordings. "
-                        "(Default: @artist - @album - @trackNumber - @title",
+                        "(Default: '@artist - @album - @trackNumber - @title'",
                         default="@artist - @album - @trackNumber - @title",
                         type=str)
     parser.add_argument('--sink',
@@ -35,8 +35,8 @@ def main():
                         "@sink specifies Pulseaudio source sink. "
                         "@length specifies the recording length in seconds. "
                         "@file specifies the output file. "
-                        "(Default: \"ffmpeg -hide_banner -loglevel error -f pulse -ac 2 -ar 44100 -i @sink -c:a libmp3lame -qscale:a 3 -y -t @length @file\")",
-                        default="ffmpeg -hide_banner -loglevel error -f pulse -ac 2 -ar 44100 -i @sink -ss @delay -c:a libmp3lame -qscale:a 3 -y -t @length @file",
+                        "(Default: 'ffmpeg -y -hide_banner -loglevel error -ss @delay -f pulse -ac 2 -ar 44100 -i @sink -c:a libmp3lame -qscale:a 3 -filter:a silenceremove=start_periods=1:start_duration=1:start_threshold=-60dB:detection=peak -t @length @file')",
+                        default="ffmpeg -y -hide_banner -loglevel error -ss @delay -f pulse -ac 2 -ar 44100 -i @sink -c:a libmp3lame -qscale:a 3 -filter:a silenceremove=start_periods=1:start_duration=1:start_threshold=0:detection=peak -t @length @file",
                         type=str)
     parser.add_argument('--useragent',
                         help="User-Agent for HTTP Requests downloading cover artwork. "
