@@ -65,7 +65,7 @@ class Recording:
             .replace('@delay',f"{self.delay_seconds:.2f}")
             for c in cmd]
         print("Starting: "+" ".join(cmd))
-        self.ffmpeg = subprocess.Popen(cmd, stdin=subprocess.PIPE, encoding='utf-8') # TODO: get system encoding
+        self.ffmpeg = subprocess.Popen(cmd, stdin=subprocess.PIPE)
         # wait in background for the recording to finish
         self.reaper = threading.Thread(target=self.wait)
         self.reaper.start()
@@ -86,7 +86,10 @@ class Recording:
         else:
             returncode = self.ffmpeg.poll() # poll() returns None while subprocess is still running
             return returncode is None
-            
+    
+    def was_started(self):
+        return self.ffmpeg is not None
+
     def is_complete(self):
         return datetime.datetime.now() + datetime.timedelta(seconds=5) > self.end_time
 
@@ -96,7 +99,7 @@ class Recording:
             print(f'Abort recording "{self.filename}"...')
             # recording is still running, ask it to terminate
             #print(f'Sending q...')
-            #self.ffmpeg.communicate('q\n', timeout=1) # does not suffice
+            #self.ffmpeg.communicate(b'q', timeout=1) # does not suffice
             #print(f'Asking to terminate...')
             #self.ffmpeg.terminate() # does not suffice either
             #print(f'Killing...')
