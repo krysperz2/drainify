@@ -3,7 +3,7 @@
 
 import os
 import threading
-from .recording import Recording
+from recording import Recording
 
 class Tonmeister:
     def __init__(self, dir:str, name:str, command:str, sink:str, delay:float, useragent:str):

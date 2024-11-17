@@ -3,11 +3,10 @@
 
 import argparse
 import sys
-import dbus
+from dasbus.loop import EventLoop
+from dasbus.connection import SessionMessageBus
 import os
-import dbus.mainloop.glib
-from gi.repository import GLib
-from .tonmeister import Tonmeister
+from tonmeister import Tonmeister
 
 def main():
     parser = argparse.ArgumentParser(description="Record tracks played by spotify via pulseaudio.")
@@ -59,17 +58,13 @@ def main():
     else:
         raise NotImplementedError("Must specify sink.")
     
-    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-    bus = dbus.SessionBus()
+    bus = SessionMessageBus()
     try:
-        remote_object = bus.get_object("org.mpris.MediaPlayer2.spotify", "/org/mpris/MediaPlayer2")
-        change_manager = dbus.Interface(remote_object, 'org.freedesktop.DBus.Properties')
-        change_manager.connect_to_signal("PropertiesChanged", tonmeister.on_properties_changed)
-    except dbus.exceptions.DBusException as dbe:
-        if (dbe.get_dbus_name() == "org.freedesktop.DBus.Error.ServiceUnknown"):
-            print(f"Please start Spotify first. ({dbe.get_dbus_message()})")
-            sys.exit(1)
-    loop = GLib.MainLoop()
+        proxy = bus.get_proxy("org.mpris.MediaPlayer2.spotify", "/org/mpris/MediaPlayer2")
+        proxy.PropertiesChanged.connect(tonmeister.on_properties_changed)
+    except :
+        sys.exit(1)
+    loop = EventLoop()
 
     try:
         print("Start recording on next track.")

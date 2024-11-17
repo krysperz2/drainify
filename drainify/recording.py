@@ -2,7 +2,6 @@
 # encoding: utf-8
 
 import re
-import dbus
 import os
 import subprocess
 import threading
@@ -32,7 +31,8 @@ class Recording:
         for arg in re.finditer("@[a-z]+", filename_format, re.I):
             a = arg.group()
             s = metadata['xesam:%s'%(a.strip("@"))]
-            s = s[0] if s.__class__ == dbus.Array else s # TODO: join for all artists
+            print(type(s))
+            # TODO: join for all artists
             filename = filename.replace(a, str(s))
         return filename
 
